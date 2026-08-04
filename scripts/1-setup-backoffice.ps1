@@ -2,8 +2,9 @@
 # Run this at the back office BEFORE taking the PC to the store
 # Right-click -> Run with PowerShell (as Administrator)
 
+param([string]$USB = "")
 $ErrorActionPreference = 'Stop'
-$USB = Split-Path -Parent $PSScriptRoot
+if (-not $USB) { $USB = Split-Path -Parent $PSScriptRoot }
 
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Cyan
