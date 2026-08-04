@@ -9,13 +9,12 @@ Write-Host "  RetailWatch - Store Configuration" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Collect store info
 $storeName = Read-Host "Store name (e.g. 145-Americas)"
 $storeSlug = $storeName.ToLower().Replace(" ", "-")
 $dvrIp     = Read-Host "DVR local IP (e.g. 192.168.1.118)"
 $dvrPass   = Read-Host "DVR password"
 $camCount  = [int](Read-Host "Number of cameras")
-$dvrType   = Read-Host "DVR type - type D for Dahua or H for Hikvision"
+$dvrType   = Read-Host "DVR type - D for Dahua or H for Hikvision"
 
 Write-Host ""
 Write-Host "Building config for $storeName ($camCount cameras)..." -ForegroundColor Yellow
@@ -28,25 +27,37 @@ function Get-RtspUrl($ip, $pass, $ch, $type) {
     }
 }
 
-# Generate mediamtx yml
-$yml = "hlsSegmentCount: 10`nhlsSegmentDuration: 1s`nhlsAllowOrigin: ""*""`npaths:"
+New-Item -ItemType Directory -Force -Path "C:\RetailWatch\mediamtx" | Out-Null
+
+# Write mediamtx yml line by line
+$ymlLines = @(
+    "hlsSegmentCount: 10",
+    "hlsSegmentDuration: 1s",
+    'hlsAllowOrigin: "*"',
+    "paths:"
+)
 for ($i = 1; $i -le $camCount; $i++) {
     $rtsp = Get-RtspUrl $dvrIp $dvrPass $i $dvrType
-    $yml += "`n  cam${i}:`n    source: ""$rtsp""`n    sourceOnDemand: no`n    sourceProtocol: tcp"
+    $ymlLines += "  cam${i}:"
+    $ymlLines += "    source: `"$rtsp`""
+    $ymlLines += "    sourceOnDemand: no"
+    $ymlLines += "    sourceProtocol: tcp"
 }
-New-Item -ItemType Directory -Force -Path "C:\RetailWatch\mediamtx" | Out-Null
-Set-Content -Path "C:\RetailWatch\mediamtx\mediamtx-store.yml" -Value $yml -Encoding UTF8
+$ymlLines | Set-Content -Path "C:\RetailWatch\mediamtx\mediamtx-store.yml" -Encoding UTF8
 Write-Host "      mediamtx config written." -ForegroundColor Green
 
-# Generate store-config.json
+# Write store-config.json
 $cameras = @()
 for ($i = 1; $i -le $camCount; $i++) {
     $rtsp = Get-RtspUrl $dvrIp $dvrPass $i $dvrType
-    $cameras += "        {`"id`": $i, `"url`": `"$rtsp`"}"
+    $cameras += [PSCustomObject]@{ id = $i; url = $rtsp }
 }
-$cameraList = $cameras -join ",`n"
-$configJson = "{`n    `"store_name`": `"$storeName`",`n    `"store_slug`": `"$storeSlug`",`n    `"cameras`": [`n$cameraList`n    ]`n}"
-Set-Content -Path "C:\RetailWatch\store-config.json" -Value $configJson -Encoding UTF8
+$config = [PSCustomObject]@{
+    store_name = $storeName
+    store_slug = $storeSlug
+    cameras    = $cameras
+}
+$config | ConvertTo-Json -Depth 3 | Set-Content -Path "C:\RetailWatch\store-config.json" -Encoding UTF8
 Write-Host "      Person detector config written." -ForegroundColor Green
 
 # Check ZeroTier
@@ -100,7 +111,7 @@ if ($ztIp) {
     Write-Host "  http://${ztIp}:8888/cam1/index.m3u8" -ForegroundColor Cyan
 }
 Write-Host ""
-Write-Host "  Then reboot to confirm auto-start works." -ForegroundColor White
+Write-Host "  Reboot to confirm auto-start works." -ForegroundColor White
 Write-Host "================================================" -ForegroundColor Green
 Write-Host ""
 Read-Host "Press Enter to close"
