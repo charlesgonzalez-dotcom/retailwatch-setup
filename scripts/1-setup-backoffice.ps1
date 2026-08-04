@@ -1,10 +1,9 @@
 # RetailWatch - Back Office Setup Script
-# Run this at the back office BEFORE taking the PC to the store
+# Downloads all dependencies from Google Drive and GitHub
 # Right-click -> Run with PowerShell (as Administrator)
 
 param([string]$USB = "")
 $ErrorActionPreference = 'Stop'
-if (-not $USB) { $USB = Split-Path -Parent $PSScriptRoot }
 
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Cyan
@@ -12,16 +11,46 @@ Write-Host "  RetailWatch - Back Office PC Setup" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Step 1: Install Python
+# Google Drive file IDs
+$gdPython   = "1L9nL-Vwkp2szhXhYYIh5b27Uk8m41Iz2"
+$gdZeroTier = "1RZBaS6TfhY1WDpporg0PcRj07_WZayTo"
+$gdMediamtx = "1fmj9aoixtMdsT2YppbgvmWkK8aosdMOp"
+
+$dlPath = "C:\RetailWatch\downloads"
+New-Item -ItemType Directory -Force -Path $dlPath | Out-Null
+New-Item -ItemType Directory -Force -Path "C:\RetailWatch\mediamtx" | Out-Null
+
+function Get-GDriveFile($id, $dest, $label) {
+    Write-Host "      Downloading $label..." -ForegroundColor Gray
+    $url = "https://drive.google.com/uc?export=download&id=$id&confirm=t"
+    try {
+        $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+        $resp = Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=$id" `
+                    -SessionVariable session -UseBasicParsing
+        if ($resp.Content -match 'name="confirm"\s+value="([^"]+)"') {
+            $confirm = $matches[1]
+            Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=$id&confirm=$confirm" `
+                -WebSession $session -OutFile $dest -UseBasicParsing
+        } else {
+            Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+        }
+        Write-Host "      $label downloaded." -ForegroundColor Green
+    } catch {
+        Write-Host "      ERROR downloading $label - check internet connection." -ForegroundColor Red
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
+}
+
+# Step 1: Download and install Python
 Write-Host "[1/5] Installing Python 3.11..." -ForegroundColor Yellow
-$pyInstaller = Join-Path $USB "installers\python-3.11.exe"
-if (Test-Path $pyInstaller) {
-    Start-Process -FilePath $pyInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1" -Wait
+$pyPath = "$dlPath\python-3.11.exe"
+if (-not (Test-Path "C:\Program Files\Python311\python.exe")) {
+    Get-GDriveFile $gdPython $pyPath "Python 3.11"
+    Start-Process -FilePath $pyPath -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1" -Wait
     Write-Host "      Python installed." -ForegroundColor Green
 } else {
-    Write-Host "      MISSING: Drop python-3.11.exe into installers\" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
-    exit 1
+    Write-Host "      Python already installed. Skipping." -ForegroundColor Green
 }
 
 # Step 2: Install Python packages
@@ -31,45 +60,31 @@ $python = "C:\Program Files\Python311\python.exe"
 & $python -m pip install opencv-python-headless ultralytics requests --quiet
 Write-Host "      Packages installed." -ForegroundColor Green
 
-# Step 3: Install ZeroTier
+# Step 3: Download and install ZeroTier
 Write-Host "[3/5] Installing ZeroTier..." -ForegroundColor Yellow
-$ztInstaller = Join-Path $USB "installers\ZeroTierOne.msi"
-if (Test-Path $ztInstaller) {
-    Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$ztInstaller`" /quiet /norestart" -Wait
-    Write-Host "      ZeroTier installed." -ForegroundColor Green
-    Start-Sleep 5
-    Write-Host "      Joining Talk4Less ZeroTier network..." -ForegroundColor Yellow
-    & "C:\Program Files (x86)\ZeroTier\One\zerotier-cli.bat" join cf719fd5401745ac
-    Write-Host "      Network join requested. Approve device in ZeroTier Central." -ForegroundColor Green
-} else {
-    Write-Host "      MISSING: Drop ZeroTierOne.msi into installers\" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
-    exit 1
-}
+$ztPath = "$dlPath\ZeroTierOne.msi"
+Get-GDriveFile $gdZeroTier $ztPath "ZeroTier"
+Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$ztPath`" /quiet /norestart" -Wait
+Write-Host "      ZeroTier installed." -ForegroundColor Green
+Start-Sleep 5
+Write-Host "      Joining Talk4Less ZeroTier network..." -ForegroundColor Yellow
+& "C:\Program Files (x86)\ZeroTier\One\zerotier-cli.bat" join cf719fd5401745ac
+Write-Host "      Network join requested. Approve device in ZeroTier Central." -ForegroundColor Green
 
-# Step 4: Copy mediamtx and detector
+# Step 4: Download mediamtx and copy detector
 Write-Host "[4/5] Installing RetailWatch files..." -ForegroundColor Yellow
-$src = Join-Path $USB "mediamtx"
-if (-not (Test-Path (Join-Path $src "mediamtx.exe"))) {
-    Write-Host "      MISSING: Copy mediamtx.exe into the mediamtx\ folder." -ForegroundColor Red
-    Read-Host "Press Enter to exit"
-    exit 1
-}
-New-Item -ItemType Directory -Force -Path "C:\RetailWatch\mediamtx" | Out-Null
-Copy-Item -Path "$src\*" -Destination "C:\RetailWatch\mediamtx" -Recurse -Force
+$mtxZip = "$dlPath\mediamtx.zip"
+Get-GDriveFile $gdMediamtx $mtxZip "mediamtx"
+Expand-Archive -Path $mtxZip -DestinationPath "C:\RetailWatch\mediamtx" -Force
+Write-Host "      mediamtx installed." -ForegroundColor Green
 
-$detectorSrc = Join-Path $USB "scripts\person-detector-template.py"
-if (Test-Path $detectorSrc) {
-    Copy-Item $detectorSrc "C:\RetailWatch\person-detector.py" -Force
-}
-
-$modelSrc = Join-Path $USB "scripts\yolov8n-pose.pt"
-if (Test-Path $modelSrc) {
-    Copy-Item $modelSrc "C:\RetailWatch\yolov8n-pose.pt" -Force
-    Write-Host "      YOLOv8 model copied." -ForegroundColor Green
-} else {
-    Write-Host "      MISSING: yolov8n-pose.pt not found in scripts\" -ForegroundColor Red
-}
+# Download detector and model from GitHub
+Write-Host "      Downloading person detector..." -ForegroundColor Gray
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/charlesgonzalez-dotcom/retailwatch-setup/main/scripts/person-detector-template.py" `
+    -OutFile "C:\RetailWatch\person-detector.py" -UseBasicParsing
+Write-Host "      Downloading YOLOv8 model..." -ForegroundColor Gray
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/charlesgonzalez-dotcom/retailwatch-setup/main/scripts/yolov8n-pose.pt" `
+    -OutFile "C:\RetailWatch\yolov8n-pose.pt" -UseBasicParsing
 Write-Host "      Files installed to C:\RetailWatch\" -ForegroundColor Green
 
 # Step 5: Install startup scripts
@@ -100,14 +115,12 @@ Write-Host "      Auto-start installed." -ForegroundColor Green
 
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Green
-Write-Host "  Back office setup COMPLETE." -ForegroundColor Green
+Write-Host "  Setup COMPLETE." -ForegroundColor Green
 Write-Host ""
-Write-Host "  IMPORTANT - Before leaving back office:" -ForegroundColor White
-Write-Host "  1. Approve this PC in ZeroTier Central" -ForegroundColor White
-Write-Host "     zerotier.com -> Networks -> cf719fd5401745ac" -ForegroundColor Gray
+Write-Host "  IMPORTANT - Approve this PC in ZeroTier Central:" -ForegroundColor White
+Write-Host "  zerotier.com -> Networks -> cf719fd5401745ac" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  AT THE STORE:" -ForegroundColor White
-Write-Host "  Run: 2-configure-store.bat" -ForegroundColor White
+Write-Host "  AT THE STORE run: 2-configure-store.ps1" -ForegroundColor White
 Write-Host "================================================" -ForegroundColor Green
 Write-Host ""
 Read-Host "Press Enter to close"
