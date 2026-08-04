@@ -22,21 +22,15 @@ New-Item -ItemType Directory -Force -Path "C:\RetailWatch\mediamtx" | Out-Null
 
 function Get-GDriveFile($id, $dest, $label) {
     Write-Host "      Downloading $label..." -ForegroundColor Gray
-    $url = "https://drive.google.com/uc?export=download&id=$id&confirm=t"
     try {
-        $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-        $resp = Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=$id" `
-                    -SessionVariable session -UseBasicParsing
-        if ($resp.Content -match 'name="confirm"\s+value="([^"]+)"') {
-            $confirm = $matches[1]
-            Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=$id&confirm=$confirm" `
-                -WebSession $session -OutFile $dest -UseBasicParsing
-        } else {
-            Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+        $url = "https://drive.google.com/uc?export=download&id=$id&confirm=t"
+        curl.exe -L -o $dest $url --silent --show-error
+        if (-not (Test-Path $dest) -or (Get-Item $dest).Length -lt 100000) {
+            throw "File too small - likely a Google Drive warning page"
         }
         Write-Host "      $label downloaded." -ForegroundColor Green
     } catch {
-        Write-Host "      ERROR downloading $label - check internet connection." -ForegroundColor Red
+        Write-Host "      ERROR downloading $label`: $_" -ForegroundColor Red
         Read-Host "Press Enter to exit"
         exit 1
     }
