@@ -11,23 +11,20 @@ Write-Host "  RetailWatch - Back Office PC Setup" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Google Drive file IDs
-$gdPython   = "1L9nL-Vwkp2szhXhYYIh5b27Uk8m41Iz2"
-$gdZeroTier = "1RZBaS6TfhY1WDpporg0PcRj07_WZayTo"
-$gdMediamtx = "1fmj9aoixtMdsT2YppbgvmWkK8aosdMOp"
+# Direct download URLs
+$urlPython   = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+$urlZeroTier = "https://download.zerotier.com/dist/ZeroTierOne.msi"
+$urlMediamtx = "https://github.com/bluenviron/mediamtx/releases/download/v1.19.3/mediamtx_v1.19.3_windows_amd64.zip"
 
 $dlPath = "C:\RetailWatch\downloads"
 New-Item -ItemType Directory -Force -Path $dlPath | Out-Null
 New-Item -ItemType Directory -Force -Path "C:\RetailWatch\mediamtx" | Out-Null
 
-function Get-GDriveFile($id, $dest, $label) {
+function Get-File($url, $dest, $label) {
     Write-Host "      Downloading $label..." -ForegroundColor Gray
     try {
-        $url = "https://drive.google.com/uc?export=download&id=$id&confirm=t"
-        curl.exe -L -o $dest $url --silent --show-error
-        if (-not (Test-Path $dest) -or (Get-Item $dest).Length -lt 100000) {
-            throw "File too small - likely a Google Drive warning page"
-        }
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
         Write-Host "      $label downloaded." -ForegroundColor Green
     } catch {
         Write-Host "      ERROR downloading $label`: $_" -ForegroundColor Red
@@ -40,7 +37,7 @@ function Get-GDriveFile($id, $dest, $label) {
 Write-Host "[1/5] Installing Python 3.11..." -ForegroundColor Yellow
 $pyPath = "$dlPath\python-3.11.exe"
 if (-not (Test-Path "C:\Program Files\Python311\python.exe")) {
-    Get-GDriveFile $gdPython $pyPath "Python 3.11"
+    Get-File $urlPython $pyPath "Python 3.11"
     Start-Process -FilePath $pyPath -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_pip=1" -Wait
     Write-Host "      Python installed." -ForegroundColor Green
 } else {
@@ -57,7 +54,7 @@ Write-Host "      Packages installed." -ForegroundColor Green
 # Step 3: Download and install ZeroTier
 Write-Host "[3/5] Installing ZeroTier..." -ForegroundColor Yellow
 $ztPath = "$dlPath\ZeroTierOne.msi"
-Get-GDriveFile $gdZeroTier $ztPath "ZeroTier"
+Get-File $urlZeroTier $ztPath "ZeroTier"
 Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$ztPath`" /quiet /norestart" -Wait
 Write-Host "      ZeroTier installed." -ForegroundColor Green
 Start-Sleep 5
@@ -68,7 +65,7 @@ Write-Host "      Network join requested. Approve device in ZeroTier Central." -
 # Step 4: Download mediamtx and copy detector
 Write-Host "[4/5] Installing RetailWatch files..." -ForegroundColor Yellow
 $mtxZip = "$dlPath\mediamtx.zip"
-Get-GDriveFile $gdMediamtx $mtxZip "mediamtx"
+Get-File $urlMediamtx $mtxZip "mediamtx"
 Expand-Archive -Path $mtxZip -DestinationPath "C:\RetailWatch\mediamtx" -Force
 Write-Host "      mediamtx installed." -ForegroundColor Green
 
