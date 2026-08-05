@@ -43,7 +43,7 @@ for ($i = 1; $i -le $camCount; $i++) {
     $ymlLines += "    sourceOnDemand: no"
     $ymlLines += "    sourceProtocol: tcp"
 }
-$ymlLines | Set-Content -Path "C:\RetailWatch\mediamtx\mediamtx-store.yml" -Encoding UTF8
+[System.IO.File]::WriteAllLines("C:\RetailWatch\mediamtx\mediamtx-store.yml", $ymlLines, [System.Text.UTF8Encoding]::new($false))
 Write-Host "      mediamtx config written." -ForegroundColor Green
 
 # Write store-config.json
